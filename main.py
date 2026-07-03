@@ -2,7 +2,7 @@ import streamlit as st
 
 from langchain_community.document_loaders import PDFPlumberLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_ollama import OllamaEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.vectorstores import FAISS
 from langchain_groq import ChatGroq
@@ -19,13 +19,12 @@ Answer:
 """
 
 
-ollama_model_name="deepseek-r1:14b"
-embeddings = OllamaEmbeddings(model="deepseek-r1:14b")
+embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 FAISS_DB_PATH="vectorstore/db_faiss"
 
 
 pdfs_directory = 'pdfs/'
-llm_model=ChatGroq(model="deepseek-r1-distill-llama-70b")
+llm_model=ChatGroq(model="llama-3.3-70b-versatile")
 
 def upload_pdf(file):
     with open(pdfs_directory + file.name, "wb") as f:
@@ -48,13 +47,13 @@ def create_chunks(documents):
     return text_chunks
 
 
-def get_embedding_model(ollama_model_name):
-    embeddings = OllamaEmbeddings(model=ollama_model_name)
+def get_embedding_model():
+    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     return embeddings
 
 
-def create_vector_store(db_faiss_path, text_chunks, ollama_model_name):
-    faiss_db=FAISS.from_documents(text_chunks, get_embedding_model(ollama_model_name))
+def create_vector_store(db_faiss_path, text_chunks):
+    faiss_db=FAISS.from_documents(text_chunks, get_embedding_model())
     faiss_db.save_local(db_faiss_path)
     return faiss_db
 
@@ -92,7 +91,7 @@ if ask_question:
         upload_pdf(uploaded_file)
         documents = load_pdf(pdfs_directory + uploaded_file.name)
         text_chunks = create_chunks(documents)
-        faiss_db = create_vector_store(FAISS_DB_PATH, text_chunks, ollama_model_name)
+        faiss_db = create_vector_store(FAISS_DB_PATH, text_chunks)
 
         retrieved_docs=retrieve_docs(faiss_db, user_query)
         response=answer_query(documents=retrieved_docs, model=llm_model, query=user_query)

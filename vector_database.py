@@ -1,12 +1,10 @@
 from langchain_community.document_loaders import PDFPlumberLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_ollama import OllamaEmbeddings
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 import os
 
 # Step 1: Upload & Load raw PDF(s)
-import os
 
 pdfs_directory = 'pdfs/'  # Folder to store PDFs
 
