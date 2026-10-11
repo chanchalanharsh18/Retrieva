@@ -8,8 +8,8 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.utils import simpleSplit
 load_dotenv()
 
-# Step1: Setup LLM (Use Llama 3.3 70B with Groq)
-llm_model = ChatGroq(model="llama-3.3-70b-versatile")
+# Step1: Setup LLM (Use GPT OSS 120B with Groq)
+llm_model = ChatGroq(model="openai/gpt-oss-120b", max_tokens=1024)
 
 # Step2: Retrieve Docs
 def retrieve_docs(query, file_name):
@@ -21,11 +21,16 @@ def get_context(documents):
 
 # Step3: Answer Question with Follow-Up Support
 custom_prompt_template = """
-You are NyayaAI, an expert legal assistant specializing in the Indian Constitution, the Indian Penal Code (IPC), Bharatiya Nyaya Sanhita (BNS), and general Indian law.
+You are an expert Document Analysis AI assistant. Your goal is to analyze the provided document context and answer user queries accurately.
 
-Your goal is to provide highly accurate, professional, and helpful legal advice.
+Your goal is to provide highly accurate, professional, and helpful advice.
 If the user's question relates to a specific uploaded document, use the context provided below.
-If the user's question is a general legal query or asks for advice on charges, risk levels, or legal procedures, use your extensive internal knowledge of Indian law to provide a detailed, accurate answer including relevant Sections, Articles, and Acts.
+If the user's question is a general query, use your extensive internal knowledge to provide a detailed, accurate answer.
+
+**CRITICAL INSTRUCTIONS FOR RESUMES & STRUCTURED DOCUMENTS:**
+- When asked to extract or rate "Projects", look for substantial entries that include tech stacks and detailed bullet points (e.g., apps, tools, platforms).
+- DO NOT treat single-line mentions from "Skills", "Achievements", "Workshops", or "Extracurriculars" (e.g., winning a workshop or solving DSA) as full projects.
+- Be aware that document chunking may separate headings from their content, so judge a project by its detailed description rather than strictly requiring a "Projects" heading in the exact same chunk.
 
 Previous Conversation:
 {history}
@@ -42,18 +47,19 @@ def answer_query(documents, model, query, history=""):
     prompt = ChatPromptTemplate.from_template(custom_prompt_template)
     chain = prompt | model
     response = chain.invoke({"question": query, "context": context, "history": history})
+    
     return response.content
 
 
 
 # Step5: Generate Downloadable Report using ReportLab
 def generate_report(user_queries, ai_responses):
-    pdf_path = "Nyaya_AI_Report.pdf"
+    pdf_path = "Document_Analysis_Report.pdf"
     c = canvas.Canvas(pdf_path, pagesize=letter)
     c.setFont("Helvetica-Bold", 16)
-    c.drawString(100, 750, "Nyaya-AI Report")
+    c.drawString(100, 750, "Document Analysis Report")
     c.setFont("Helvetica", 12)
-    c.drawString(100, 730, "Below is a record of your conversation with Nyaya-AI.")
+    c.drawString(100, 730, "Below is a record of your conversation with the AI.")
     
     y = 700
     max_width = 450  # Maximum width for text before wrapping

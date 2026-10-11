@@ -1,3 +1,7 @@
-# Ignore virtual environment
+# Ignore virtual environment & secrets
 .env
 venv/
+
+# Python cache & build
+__pycache__/
+*.pyc

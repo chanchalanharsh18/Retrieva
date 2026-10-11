@@ -4,20 +4,9 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 import os
 
-# Step 1: Upload & Load raw PDF(s)
+# Step 1: Load raw PDF(s)
 
 pdfs_directory = 'pdfs/'  # Folder to store PDFs
-
-def upload_pdf(file):
-    # Ensure the directory exists
-    if not os.path.exists(pdfs_directory):
-        os.makedirs(pdfs_directory)
-
-    file_path = os.path.join(pdfs_directory, file.name)  # Construct file path
-    with open(file_path, "wb") as f:
-        f.write(file.getbuffer())
-    
-    return file_path  # Return the file path
 
 def load_pdf(file_path):
     loader = PDFPlumberLoader(file_path)
@@ -51,17 +40,41 @@ FAISS_DB_PATH = "vectorstore/db_faiss"
 
 def index_pdf(file_path):
     documents = load_pdf(file_path)
-    file_name = file_path.split("/")[-1]  # Extract filename
+    file_name = file_path.replace("\\", "/").split("/")[-1]  # Extract filename safely
     text_chunks = create_chunks(documents, file_name)
     faiss_db = FAISS.from_documents(text_chunks, embedding_model)
     faiss_db.save_local(FAISS_DB_PATH)
     return faiss_db
 
-# Step 5: Retrieve Docs with Filtering
-def retrieve_docs(query, file_name):
-    faiss_db = FAISS.load_local(FAISS_DB_PATH, embedding_model, allow_dangerous_deserialization=True)
-    retrieved_docs = faiss_db.similarity_search(query, k=5)
+def index_multiple_pdfs(file_paths):
+    all_chunks = []
+    for file_path in file_paths:
+        documents = load_pdf(file_path)
+        file_name = file_path.replace("\\", "/").split("/")[-1]
+        text_chunks = create_chunks(documents, file_name)
+        all_chunks.extend(text_chunks)
     
-    filtered_docs = [doc for doc in retrieved_docs if doc.metadata.get("source") == file_name]
+    if all_chunks:
+        if os.path.exists(os.path.join(FAISS_DB_PATH, "index.faiss")):
+            faiss_db = FAISS.load_local(FAISS_DB_PATH, embedding_model, allow_dangerous_deserialization=True)
+            faiss_db.add_documents(all_chunks)
+        else:
+            faiss_db = FAISS.from_documents(all_chunks, embedding_model)
+            
+        faiss_db.save_local(FAISS_DB_PATH)
+        return faiss_db
+    return None
+
+# Step 5: Retrieve Docs with Filtering
+def retrieve_docs(query, file_names=None):
+    faiss_db = FAISS.load_local(FAISS_DB_PATH, embedding_model, allow_dangerous_deserialization=True)
+    # Increased k to 8 to pull in more of the document, especially for short docs like resumes
+    retrieved_docs = faiss_db.similarity_search(query, k=8)
+    
+    if file_names:
+        # Check if the document's source is in the list of uploaded filenames
+        filtered_docs = [doc for doc in retrieved_docs if doc.metadata.get("source") in file_names]
+    else:
+        filtered_docs = retrieved_docs
 
     return filtered_docs
