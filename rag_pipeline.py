@@ -3,9 +3,14 @@ import os
 from vector_database import retrieve_docs as retrieve_filtered_docs
 from langchain_core.prompts import ChatPromptTemplate
 from dotenv import load_dotenv
+import re
+import datetime
 from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
 from reportlab.pdfgen import canvas
-from reportlab.lib.utils import simpleSplit
+
 load_dotenv()
 
 # Step1: Setup LLM (Use GPT OSS 120B with Groq)
@@ -16,21 +21,30 @@ def retrieve_docs(query, file_name):
     return retrieve_filtered_docs(query, file_name)
 
 def get_context(documents):
-    context = "\n\n".join([doc.page_content for doc in documents])
-    return context
+    seen = set()
+    unique_contents = []
+    for doc in documents:
+        content = doc.page_content.strip()
+        if content and content not in seen:
+            seen.add(content)
+            unique_contents.append(content)
+    return "\n\n---\n\n".join(unique_contents)
 
 # Step3: Answer Question with Follow-Up Support
 custom_prompt_template = """
-You are an expert Document Analysis AI assistant. Your goal is to analyze the provided document context and answer user queries accurately.
+You are an expert Document Analysis AI assistant. Your goal is to analyze the provided document context and answer user queries accurately, thoroughly, and professionally.
 
-Your goal is to provide highly accurate, professional, and helpful advice.
-If the user's question relates to a specific uploaded document, use the context provided below.
-If the user's question is a general query, use your extensive internal knowledge to provide a detailed, accurate answer.
-
-**CRITICAL INSTRUCTIONS FOR RESUMES & STRUCTURED DOCUMENTS:**
-- When asked to extract or rate "Projects", look for substantial entries that include tech stacks and detailed bullet points (e.g., apps, tools, platforms).
-- DO NOT treat single-line mentions from "Skills", "Achievements", "Workshops", or "Extracurriculars" (e.g., winning a workshop or solving DSA) as full projects.
-- Be aware that document chunking may separate headings from their content, so judge a project by its detailed description rather than strictly requiring a "Projects" heading in the exact same chunk.
+GUIDELINES FOR STRUCTURED DOCUMENTS & RESUMES:
+1. Grounding: Answer strictly using the context from the uploaded document. Do not invent details or assume information that is not in the text.
+2. Distinct Sections & Projects:
+   - Identify distinct sections accurately (e.g., Education, Projects, Technical Skills, Positions of Responsibility, Achievements).
+   - When asked about "Projects", identify and extract each project listed in the Projects section separately with its exact title, year/dates, tech stack, and full bullet-point contributions.
+   - Do NOT merge separate projects into one.
+   - Do NOT conflate the general "Technical Skills" section with an individual project's tech stack unless explicitly described in that project's bullet points.
+   - If the document context contains repeated text or overlaps due to chunking, consolidate the information seamlessly without adding disclaimers or meta-notes about duplicates or chunk boundaries.
+3. Clarity & Formatting:
+   - Present extracted items cleanly using structured Markdown (such as clear headings, bullet points, or markdown tables).
+   - If the user asks a general question not found in the document, state what the document says or answer clearly.
 
 Previous Conversation:
 {history}
@@ -51,40 +65,311 @@ def answer_query(documents, model, query, history=""):
     return response.content
 
 
+# Step5: Professional PDF Report Generation via ReportLab Platypus
 
-# Step5: Generate Downloadable Report using ReportLab
-def generate_report(user_queries, ai_responses):
+class NumberedCanvas(canvas.Canvas):
+    report_date = ""
+    report_files = "Active Corpus"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._saved_page_states = []
+
+    def showPage(self):
+        self._saved_page_states.append(dict(self.__dict__))
+        self._startPage()
+
+    def save(self):
+        num_pages = len(self._saved_page_states)
+        for state in self._saved_page_states:
+            self.__dict__.update(state)
+            self.draw_page_decorations(num_pages)
+            super().showPage()
+        super().save()
+
+    def draw_page_decorations(self, total_pages):
+        self.saveState()
+        width, height = self._pagesize
+        margin_x = 54
+        max_text_width = width - (margin_x * 2)
+
+        # Top Accent Header Bar
+        self.setFillColor(colors.HexColor("#0052cc"))
+        self.rect(margin_x, height - 36, max_text_width, 3, fill=True, stroke=False)
+
+        self.setFont("Helvetica-Bold", 13)
+        self.setFillColor(colors.HexColor("#0f172a"))
+        self.drawString(margin_x, height - 52, "Retrieva — Document Analysis & Q&A Report")
+
+        # Subtitle
+        self.setFont("Helvetica", 8)
+        self.setFillColor(colors.HexColor("#64748b"))
+        r_date = self.report_date or datetime.datetime.now().strftime("%B %d, %Y - %H:%M:%S")
+        r_files = self.report_files or "Active Corpus"
+        self.drawString(margin_x, height - 64, f"Generated: {r_date}  |  Source Document(s): {r_files}")
+
+        # Top header divider
+        self.setStrokeColor(colors.HexColor("#e2e8f0"))
+        self.setLineWidth(0.5)
+        self.line(margin_x, height - 70, width - margin_x, height - 70)
+
+        # Bottom footer divider
+        self.line(margin_x, 42, width - margin_x, 42)
+        self.setFont("Helvetica", 8)
+        self.setFillColor(colors.HexColor("#94a3b8"))
+        self.drawString(margin_x, 30, "Generated by Retrieva Document Intelligence Engine • Verified Source Citations")
+        self.drawRightString(width - margin_x, 30, f"Page {self._pageNumber} of {total_pages}")
+        self.restoreState()
+
+
+def clean_xml_and_unicode(text):
+    """Sanitize unicode characters and unsupported typography so ReportLab never renders black squares."""
+    replacements = {
+        "—": " - ",
+        "–": "-",
+        "‑": "-",
+        "•": "&bull;",
+        "\u2022": "&bull;",
+        "\u2013": "-",
+        "\u2014": " - ",
+        "\u2011": "-",
+        "\u00a0": " ",
+        "“": '"',
+        "”": '"',
+        "‘": "'",
+        "’": "'",
+        "\u201c": '"',
+        "\u201d": '"',
+        "\u2018": "'",
+        "\u2019": "'",
+        "…": "...",
+    }
+    for k, v in replacements.items():
+        text = text.replace(k, v)
+
+    # Convert HTML breaks
+    text = re.sub(r'<br\s*/?>', '<br/>', text, flags=re.IGNORECASE)
+    # Convert markdown bold and italics
+    text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+    text = re.sub(r'(?<![<\w/])\*([^\*]+?)\*(?![>\w])', r'<i>\1</i>', text)
+    text = re.sub(r'`([^`]+?)`', r'<font name="Courier" color="#0052cc">\1</font>', text)
+
+    # Convert any raw non-ascii character safely to ASCII
+    safe_chars = []
+    for ch in text:
+        if ord(ch) < 128:
+            safe_chars.append(ch)
+        else:
+            safe_chars.append(' ')
+    return "".join(safe_chars)
+
+
+def parse_markdown_answer_to_flowables(text, styles, width=504):
+    flowables = []
+    lines = text.strip().split('\n')
+    
+    body_style = ParagraphStyle(
+        'ReportBody',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=9,
+        leading=14,
+        textColor=colors.HexColor('#334155'),
+        spaceAfter=4
+    )
+    
+    heading_style = ParagraphStyle(
+        'ReportHeading',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=10,
+        leading=14.5,
+        textColor=colors.HexColor('#0f172a'),
+        spaceBefore=6,
+        spaceAfter=3
+    )
+    
+    bullet_style = ParagraphStyle(
+        'ReportBullet',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=9,
+        leading=13.5,
+        textColor=colors.HexColor('#334155'),
+        leftIndent=14,
+        firstLineIndent=-10,
+        spaceAfter=3
+    )
+
+    table_header_style = ParagraphStyle(
+        'TableHeader',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=8,
+        leading=11,
+        textColor=colors.white,
+        alignment=0
+    )
+
+    table_cell_style = ParagraphStyle(
+        'TableCell',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=8,
+        leading=11.5,
+        textColor=colors.HexColor('#1e293b'),
+        alignment=0
+    )
+
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        if not line:
+            i += 1
+            continue
+
+        # Check for Markdown Table block
+        if line.startswith('|') and line.endswith('|') and i + 1 < len(lines) and '|' in lines[i+1] and '-' in lines[i+1]:
+            table_lines = []
+            while i < len(lines) and lines[i].strip().startswith('|') and lines[i].strip().endswith('|'):
+                table_lines.append(lines[i].strip())
+                i += 1
+            
+            table_data = []
+            raw_data = []
+            for t_idx, t_line in enumerate(table_lines):
+                parts = [p.strip() for p in t_line.split('|')[1:-1]]
+                if all(re.match(r'^:?-+:?$', p) for p in parts):
+                    continue
+                
+                raw_data.append(parts)
+                row_cells = []
+                is_header = (len(table_data) == 0)
+                for part in parts:
+                    clean_cell = clean_xml_and_unicode(part)
+                    p_style = table_header_style if is_header else table_cell_style
+                    row_cells.append(Paragraph(clean_cell, p_style))
+                table_data.append(row_cells)
+            
+            if table_data:
+                num_cols = max(len(row) for row in table_data)
+                for row in table_data:
+                    while len(row) < num_cols:
+                        row.append(Paragraph("", table_cell_style))
+                
+                # Proportional column width calculation
+                col_lens = [8] * num_cols
+                for r in raw_data:
+                    for c_idx, cell_str in enumerate(r):
+                        if c_idx < num_cols:
+                            col_lens[c_idx] = max(col_lens[c_idx], min(55, len(cell_str)))
+                
+                total_weight = sum(col_lens)
+                col_widths = [(weight / total_weight) * width for weight in col_lens]
+
+                t = Table(table_data, colWidths=col_widths, repeatRows=1)
+                t.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0052cc")),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                    ('TOPPADDING', (0, 0), (-1, -1), 4),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 5),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
+                ]))
+                flowables.append(Spacer(1, 4))
+                flowables.append(t)
+                flowables.append(Spacer(1, 6))
+            continue
+
+        # Check for Headings
+        if line.startswith('###') or line.startswith('##') or line.startswith('#'):
+            clean_heading = clean_xml_and_unicode(line.lstrip('#').strip())
+            flowables.append(Paragraph(clean_heading, heading_style))
+            i += 1
+            continue
+
+        # Check for Horizontal Dividers
+        if line in ('---', '***', '___'):
+            flowables.append(Spacer(1, 4))
+            flowables.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#e2e8f0"), spaceAfter=5, spaceBefore=4))
+            i += 1
+            continue
+
+        # Check for Bullet List items
+        if line.startswith(('- ', '* ', '• ')):
+            content = line[2:].strip()
+            clean_bullet = clean_xml_and_unicode(content)
+            p = Paragraph(f"&bull;  {clean_bullet}", bullet_style)
+            flowables.append(p)
+            i += 1
+            continue
+
+        # Regular text or short subtitles
+        clean_line = clean_xml_and_unicode(line)
+        if len(line) < 55 and not line.endswith('.') and (line.endswith(':') or line.isupper() or 'Overview' in line or 'Highlighted' in line):
+            flowables.append(Paragraph(clean_line, heading_style))
+        else:
+            flowables.append(Paragraph(clean_line, body_style))
+        i += 1
+
+    return flowables
+
+
+def generate_report(user_queries, ai_responses, active_files=None):
     pdf_path = "Document_Analysis_Report.pdf"
-    c = canvas.Canvas(pdf_path, pagesize=letter)
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(100, 750, "Document Analysis Report")
-    c.setFont("Helvetica", 12)
-    c.drawString(100, 730, "Below is a record of your conversation with the AI.")
+    styles = getSampleStyleSheet()
     
-    y = 700
-    max_width = 450  # Maximum width for text before wrapping
-    line_height = 15
+    doc = SimpleDocTemplate(
+        pdf_path,
+        pagesize=letter,
+        leftMargin=54,
+        rightMargin=54,
+        topMargin=80,
+        bottomMargin=52
+    )
     
-    for question, answer in zip(user_queries, ai_responses):
-        c.setFont("Helvetica-Bold", 12)
-        q_lines = simpleSplit(f"Q: {question}", "Helvetica-Bold", 12, max_width)
-        a_lines = simpleSplit(f"A: {answer}", "Helvetica", 12, max_width)
-        
-        for line in q_lines:
-            c.drawString(100, y, line)
-            y -= line_height
-        
-        c.setFont("Helvetica", 12)
-        for line in a_lines:
-            c.drawString(100, y, line)
-            y -= line_height
-        
-        y -= 20  # Extra space between Q&A
-        
-        if y < 50:  # Prevent text from overflowing
-            c.showPage()
-            c.setFont("Helvetica", 12)
-            y = 750
+    NumberedCanvas.report_date = datetime.datetime.now().strftime("%B %d, %Y - %H:%M:%S")
+    NumberedCanvas.report_files = ", ".join(active_files) if active_files else "Active Corpus"
     
-    c.save()
+    story = []
+    width = letter[0] - 108 # 504 pt printable width
+    
+    q_style = ParagraphStyle(
+        'QStyle',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=9.5,
+        leading=13.5,
+        textColor=colors.HexColor('#0052cc')
+    )
+    
+    for i, (q, a) in enumerate(zip(user_queries, ai_responses), 1):
+        clean_q = clean_xml_and_unicode(q)
+        q_p = Paragraph(f"<b>Query {i}:</b> {clean_q}", q_style)
+        q_box = Table([[q_p]], colWidths=[width])
+        q_box.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f0f7ff')),
+            ('BOX', (0, 0), (-1, -1), 0.75, colors.HexColor('#bfdbfe')),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ]))
+        
+        story.append(q_box)
+        story.append(Spacer(1, 6))
+        
+        # Parse assistant markdown response into styled flowables
+        ans_flowables = parse_markdown_answer_to_flowables(a, styles, width=width)
+        story.extend(ans_flowables)
+        
+        # Space & divider between questions
+        story.append(Spacer(1, 8))
+        story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#e2e8f0"), spaceAfter=10, spaceBefore=4))
+        
+    doc.build(story, canvasmaker=NumberedCanvas)
     return pdf_path

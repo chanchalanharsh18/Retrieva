@@ -176,9 +176,9 @@
   flex-grow: 1;
   display: flex;
   background: #f1f5f9;
-  padding: 1rem;
-  gap: 1rem;
+  padding: 1rem 1.5rem;
   overflow: hidden;
+  justify-content: center;
 }
 
 /* Document Panel (Left Side of Split) */
@@ -262,7 +262,7 @@
   color: var(--text-primary);
 }
 
-/* Chat Panel (Right Side of Split) */
+/* Chat Panel (Full Window Chat Layout) */
 .chat-panel {
   flex: 1;
   background: var(--bg-panel);
@@ -272,6 +272,8 @@
   flex-direction: column;
   overflow: hidden;
   box-shadow: var(--shadow-sm);
+  max-width: 1100px;
+  width: 100%;
 }
 
 .chat-header {

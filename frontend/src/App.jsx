@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { marked } from 'marked';
 import { 
   UploadCloud, Send, FileText, User, Zap, Layout, 
-  Folder, BarChart2, MoreVertical, Search, Paperclip, Check, Sparkles, FileSearch
+  Folder, BarChart2, MoreVertical, Search, Paperclip, Check, Sparkles, FileSearch, Trash2, Download
 } from 'lucide-react';
 import './App.css';
 
@@ -12,6 +12,7 @@ function App() {
   const [inputValue, setInputValue] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   
   const messagesEndRef = useRef(null);
@@ -24,6 +25,88 @@ function App() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, isTyping]);
+
+  useEffect(() => {
+    // Fetch currently stored documents on mount
+    fetch('http://localhost:8000/documents')
+      .then(res => res.json())
+      .then(data => {
+        if (data.filenames && data.filenames.length > 0) {
+          setUploadedFiles(data.filenames);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleClearSession = async () => {
+    if (!window.confirm("Are you sure you want to clear all loaded documents from the library?")) return;
+    try {
+      await fetch('http://localhost:8000/clear', { method: 'POST' });
+      setUploadedFiles([]);
+      setMessages([]);
+      setActiveTab('workspace');
+    } catch (err) {
+      console.error('Failed to clear library:', err);
+    }
+  };
+
+  const handleDeleteFile = async (e, filename) => {
+    e.stopPropagation();
+    try {
+      const formData = new URLSearchParams();
+      formData.append('filename', filename);
+      const res = await fetch('http://localhost:8000/delete-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: formData.toString()
+      });
+      const data = await res.json();
+      setUploadedFiles(data.filenames || []);
+      if (!data.filenames || data.filenames.length === 0) {
+        setActiveTab('workspace');
+      }
+    } catch (err) {
+      console.error('Failed to delete document:', err);
+    }
+  };
+
+  const handleExportReport = async () => {
+    const qaMessages = messages.filter(m => m.role === 'user' || m.role === 'assistant');
+    if (!qaMessages.length) {
+      alert("No questions and answers yet. Ask a question first to generate an analysis report.");
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      const response = await fetch('http://localhost:8000/export-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: qaMessages }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        alert(err.detail || "Failed to generate report.");
+        return;
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Retrieva_Analysis_Report_${new Date().toISOString().slice(0, 10)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Failed to export report:', error);
+      alert('Error exporting PDF report. Ensure backend is running.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const handleFileUpload = async (event) => {
     const files = event.target.files;
@@ -135,15 +218,77 @@ function App() {
         {/* Left Sidebar */}
         <aside className="sidebar">
           <div className="sidebar-section">
-            <div className="sidebar-title">DOCUMENTS REPO</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: '0.75rem' }}>
+              <div className="sidebar-title">DOCUMENTS REPO</div>
+              {uploadedFiles.length > 0 && (
+                <button
+                  title="Clear all documents"
+                  onClick={handleClearSession}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#9ca3af',
+                    cursor: 'pointer',
+                    fontSize: '0.7rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '2px',
+                    padding: '2px 4px',
+                    borderRadius: '4px',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = '#fee2e2'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = '#9ca3af'; e.currentTarget.style.background = 'none'; }}
+                >
+                  <Trash2 size={12} /> Clear
+                </button>
+              )}
+            </div>
             <div className="sidebar-item active">
               <Folder size={16} />
-              Corpus Library
+              Corpus Library ({uploadedFiles.length})
             </div>
             {uploadedFiles.map((file, idx) => (
-              <div key={idx} className="sidebar-item" style={{ paddingLeft: '2.5rem', fontSize: '0.8rem', opacity: 0.8 }}>
-                <FileText size={14} />
-                {file.length > 20 ? file.substring(0, 20) + '...' : file}
+              <div 
+                key={idx} 
+                className="sidebar-item" 
+                style={{ 
+                  paddingLeft: '2rem', 
+                  paddingRight: '0.75rem',
+                  fontSize: '0.8rem', 
+                  opacity: 0.9, 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between',
+                  gap: '0.5rem'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', overflow: 'hidden' }}>
+                  <FileText size={14} style={{ flexShrink: 0 }} />
+                  <span title={file} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {file.length > 18 ? file.substring(0, 18) + '...' : file}
+                  </span>
+                </div>
+                <button
+                  title={`Delete ${file}`}
+                  onClick={(e) => handleDeleteFile(e, file)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '3px',
+                    borderRadius: '4px',
+                    color: '#9ca3af',
+                    display: 'flex',
+                    alignItems: 'center',
+                    flexShrink: 0,
+                    transition: 'color 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                  onMouseLeave={(e) => e.currentTarget.style.color = '#9ca3af'}
+                >
+                  <Trash2 size={13} />
+                </button>
               </div>
             ))}
           </div>
@@ -178,53 +323,58 @@ function App() {
           )}
 
           {activeTab === 'document' && (
-            <>
-              {/* Document Panel */}
-              <div className="document-panel">
-                <div className="panel-header">
-                  <div className="file-info">
-                    <div className="file-icon-box">
-                      <FileText size={18} />
-                    </div>
-                    <div className="file-details">
-                      <h3>{uploadedFiles.length > 0 ? (uploadedFiles.length === 1 ? uploadedFiles[0] : `${uploadedFiles.length} documents loaded`) : 'No document loaded'}</h3>
-                      {uploadedFiles.length > 0 && (
-                        <div className="file-meta">
-                          <span>PDF</span> • <span style={{ color: '#0052cc' }}>Vectorized</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="panel-actions">
-                    {/* Placeholder for future features */}
-                  </div>
-                </div>
-                <div className="document-content">
-                  {uploadedFiles.length > 0 ? (
-                    <div style={{ color: '#9ca3af', textAlign: 'center', marginTop: '4rem' }}>
-                      <FileText size={48} style={{ opacity: 0.2, marginBottom: '1rem' }} />
-                      <p>Document content is indexed in the vector database.</p>
-                      <p style={{ fontSize: '0.8rem' }}>RAG Pipeline is active. You can now ask questions about this document.</p>
-                    </div>
-                  ) : (
-                    <div style={{ color: '#9ca3af', textAlign: 'center', marginTop: '4rem' }}>
-                      <p>No document selected for preview.</p>
-                    </div>
+            <div className="chat-panel">
+              <div className="chat-header">
+                <div className="chat-title">
+                  <Zap size={18} color="#0052cc" />
+                  <span>Ask Retrieva</span>
+                  {uploadedFiles.length > 0 && (
+                    <span 
+                      style={{
+                        marginLeft: '0.75rem',
+                        fontSize: '0.75rem',
+                        fontWeight: '500',
+                        color: '#0052cc',
+                        background: '#eef2ff',
+                        padding: '0.2rem 0.65rem',
+                        borderRadius: '12px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.35rem',
+                        border: '1px solid #dbeafe'
+                      }}
+                    >
+                      <FileText size={12} />
+                      {uploadedFiles.length === 1 ? uploadedFiles[0] : `${uploadedFiles.length} documents active`}
+                    </span>
                   )}
                 </div>
+                <button
+                  className="btn-export-report"
+                  onClick={handleExportReport}
+                  disabled={isExporting}
+                  title="Export full Q&A conversation as a PDF Report"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.4rem 0.85rem',
+                    fontSize: '0.8rem',
+                    fontWeight: '500',
+                    color: '#0052cc',
+                    background: '#f0f5ff',
+                    border: '1px solid #bfdbfe',
+                    borderRadius: '6px',
+                    cursor: isExporting ? 'wait' : 'pointer',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = '#dbeafe'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = '#f0f5ff'; }}
+                >
+                  <Download size={14} />
+                  {isExporting ? 'Generating PDF...' : 'Export PDF Report'}
+                </button>
               </div>
-
-              {/* Chat Panel */}
-              <div className="chat-panel">
-                <div className="chat-header">
-                  <div className="chat-title">
-                    <Zap size={18} color="#0052cc" />
-                    Ask Retrieva
-                  </div>
-                  <div className="chunk-badge">
-                    k=4 chunks
-                  </div>
-                </div>
 
                 <div className="chat-messages">
                   {messages.map((msg, idx) => (
@@ -298,7 +448,6 @@ function App() {
                   </div>
                 </div>
               </div>
-            </>
           )}
 
         </main>
