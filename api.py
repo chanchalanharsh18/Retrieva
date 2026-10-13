@@ -4,11 +4,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 import os
+import asyncio
 
 from vector_database import index_multiple_pdfs
 from rag_pipeline import answer_query, retrieve_docs, llm_model, generate_report
 
-app = FastAPI()
+app = FastAPI(title="Retrieva API")
 
 # Enable CORS so the React frontend can communicate with FastAPI
 app.add_middleware(
@@ -18,6 +19,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/")
+async def root():
+    return {"status": "ok", "service": "Retrieva API", "online": True}
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
 
 # Initialize filenames from pdfs folder if present (persists across server reloads)
 active_session_files = []
@@ -42,9 +51,9 @@ async def upload_files(files: List[UploadFile] = File(...)):
                 active_session_files.append(file.filename)
             new_files.append(file_path)
                 
-        # Index all newly uploaded PDFs (replaces prior chunks if same file)
+        # Index all newly uploaded PDFs in background worker thread to prevent event loop blocking
         if new_files:
-            index_multiple_pdfs(new_files)
+            await asyncio.to_thread(index_multiple_pdfs, new_files)
         
         return {"message": f"Successfully indexed {len(new_files)} document(s)", "filenames": active_session_files}
     except Exception as e:
@@ -59,11 +68,11 @@ async def chat_endpoint(query: str = Form(...), history: str = Form("")):
         global active_session_files
         
         if active_session_files:
-            retrieved_docs = retrieve_docs(query, active_session_files)
+            retrieved_docs = await asyncio.to_thread(retrieve_docs, query, active_session_files)
         else:
             retrieved_docs = []
             
-        response = answer_query(documents=retrieved_docs, model=llm_model, query=query, history=history)
+        response = await asyncio.to_thread(answer_query, retrieved_docs, llm_model, query, history)
         
         sources_list = []
         if retrieved_docs:
@@ -129,7 +138,7 @@ async def delete_document(filename: str = Form(...)):
         except Exception:
             pass
     if remaining_paths:
-        index_multiple_pdfs(remaining_paths)
+        await asyncio.to_thread(index_multiple_pdfs, remaining_paths)
         
     return {"message": f"Deleted {filename}", "filenames": active_session_files}
 

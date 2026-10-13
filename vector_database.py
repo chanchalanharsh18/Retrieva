@@ -28,8 +28,8 @@ def load_pdf(file_path):
 # Step 2: Create Chunks
 def create_chunks(documents, file_name):
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1500,
-        chunk_overlap=300,
+        chunk_size=800,
+        chunk_overlap=150,
         add_start_index=True
     )
     text_chunks = text_splitter.split_documents(documents)
@@ -57,7 +57,8 @@ def get_embedding_model():
             pass
         _embedding_model_instance = HuggingFaceEmbeddings(
             model_name="sentence-transformers/all-MiniLM-L6-v2",
-            model_kwargs={"device": "cpu"}
+            model_kwargs={"device": "cpu"},
+            encode_kwargs={"batch_size": 1, "normalize_embeddings": True}
         )
     return _embedding_model_instance
 
@@ -106,6 +107,8 @@ def index_multiple_pdfs(file_paths):
 
         faiss_db = FAISS.from_documents(combined_chunks, embedding_model, ids=chunk_ids)
         faiss_db.save_local(FAISS_DB_PATH)
+        import gc
+        gc.collect()
         return faiss_db
     return None
 
