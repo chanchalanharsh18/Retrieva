@@ -28,10 +28,10 @@ async def root():
 async def health_check():
     return {"status": "healthy"}
 
-# Initialize filenames from pdfs folder if present (persists across server reloads)
+# Initialize filenames from pdfs folder if present (ignores .gitkeep/dotfiles)
 active_session_files = []
 if os.path.exists("pdfs"):
-    active_session_files = [f for f in os.listdir("pdfs") if os.path.isfile(os.path.join("pdfs", f))]
+    active_session_files = [f for f in os.listdir("pdfs") if os.path.isfile(os.path.join("pdfs", f)) and not f.startswith(".")]
 
 @app.post("/upload")
 async def upload_files(files: List[UploadFile] = File(...)):
@@ -93,7 +93,7 @@ async def chat_endpoint(query: str = Form(...), history: str = Form("")):
 async def get_documents():
     global active_session_files
     if os.path.exists("pdfs"):
-        active_session_files = [f for f in os.listdir("pdfs") if os.path.isfile(os.path.join("pdfs", f))]
+        active_session_files = [f for f in os.listdir("pdfs") if os.path.isfile(os.path.join("pdfs", f)) and not f.startswith(".")]
     else:
         active_session_files = []
     return {"filenames": active_session_files}
@@ -110,10 +110,11 @@ async def clear_session():
         
     if os.path.exists("pdfs"):
         for f in os.listdir("pdfs"):
-            try:
-                os.remove(os.path.join("pdfs", f))
-            except Exception:
-                pass
+            if not f.startswith("."):
+                try:
+                    os.remove(os.path.join("pdfs", f))
+                except Exception:
+                    pass
         
     return {"message": "Session cleared", "filenames": []}
 

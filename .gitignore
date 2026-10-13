@@ -5,3 +5,10 @@ venv/
 # Python cache & build
 __pycache__/
 *.pyc
+
+# Local runtime storage (keep folders, ignore uploaded contents)
+pdfs/*
+!pdfs/.gitkeep
+vectorstore/*
+!vectorstore/.gitkeep
+Document_Analysis_Report.pdf
