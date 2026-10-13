@@ -54,17 +54,34 @@ function App() {
     scrollToBottom();
   }, [messages, isTyping]);
 
-  useEffect(() => {
-    // Fetch currently stored documents on mount
+  const [backendStatus, setBackendStatus] = useState('checking'); // 'online', 'waking'
+
+  const checkHealth = () => {
     fetch(`${API_BASE}/documents`)
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error('Not ok');
+        return res.json();
+      })
       .then(data => {
+        setBackendStatus('online');
         if (data.filenames && data.filenames.length > 0) {
           setUploadedFiles(data.filenames);
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        setBackendStatus('waking');
+      });
+  };
+
+  useEffect(() => {
+    checkHealth();
   }, []);
+
+  useEffect(() => {
+    if (backendStatus === 'online') return;
+    const interval = setInterval(checkHealth, 8000);
+    return () => clearInterval(interval);
+  }, [backendStatus]);
 
   const handleClearSession = async () => {
     if (!window.confirm("Are you sure you want to clear all loaded documents from the library?")) return;
@@ -154,6 +171,10 @@ function App() {
         method: 'POST',
         body: formData,
       });
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        throw new Error(`HTTP ${response.status} ${response.statusText}${errorText ? ': ' + errorText : ''}`);
+      }
       const data = await response.json();
       setUploadedFiles(data.filenames || []);
       setActiveTab('document'); // Switch to document view
@@ -163,7 +184,7 @@ function App() {
       }]);
     } catch (error) {
       console.error('Upload failed:', error);
-      alert('Upload failed. Is the backend running?');
+      alert(`Upload failed: ${error.message || 'Server error'}. Please verify backend is awake.`);
     } finally {
       setIsUploading(false);
       setUploadingFileNames([]);
@@ -327,9 +348,26 @@ function App() {
             ))}
           </div>
           <div className="sidebar-footer">
-            <span>Index Status</span>
+            <span>Backend Status</span>
             <div className="status-indicator">
-              <span style={{ color: '#10b981', fontWeight: 600 }}>Online</span>
+              {backendStatus === 'online' && (
+                <span style={{ color: '#10b981', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
+                  Online
+                </span>
+              )}
+              {backendStatus === 'waking' && (
+                <span style={{ color: '#f59e0b', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }} title="Render free tier takes ~30-50s to wake up on first visit">
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} />
+                  Waking up...
+                </span>
+              )}
+              {backendStatus === 'checking' && (
+                <span style={{ color: '#94a3b8', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#94a3b8', display: 'inline-block' }} />
+                  Connecting...
+                </span>
+              )}
             </div>
           </div>
         </aside>
