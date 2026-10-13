@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import './App.css';
 
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? 'http://localhost:8000' : '')).replace(/\/$/, '');
+
 function App() {
   const [activeTab, setActiveTab] = useState('workspace'); // 'workspace', 'document'
   const [messages, setMessages] = useState([]);
@@ -28,7 +30,7 @@ function App() {
 
   useEffect(() => {
     // Fetch currently stored documents on mount
-    fetch('http://localhost:8000/documents')
+    fetch(`${API_BASE}/documents`)
       .then(res => res.json())
       .then(data => {
         if (data.filenames && data.filenames.length > 0) {
@@ -41,7 +43,7 @@ function App() {
   const handleClearSession = async () => {
     if (!window.confirm("Are you sure you want to clear all loaded documents from the library?")) return;
     try {
-      await fetch('http://localhost:8000/clear', { method: 'POST' });
+      await fetch(`${API_BASE}/clear`, { method: 'POST' });
       setUploadedFiles([]);
       setMessages([]);
       setActiveTab('workspace');
@@ -55,7 +57,7 @@ function App() {
     try {
       const formData = new URLSearchParams();
       formData.append('filename', filename);
-      const res = await fetch('http://localhost:8000/delete-document', {
+      const res = await fetch(`${API_BASE}/delete-document`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: formData.toString()
@@ -79,7 +81,7 @@ function App() {
 
     setIsExporting(true);
     try {
-      const response = await fetch('http://localhost:8000/export-report', {
+      const response = await fetch(`${API_BASE}/export-report`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: qaMessages }),
@@ -119,7 +121,7 @@ function App() {
     }
 
     try {
-      const response = await fetch('http://localhost:8000/upload', {
+      const response = await fetch(`${API_BASE}/upload`, {
         method: 'POST',
         body: formData,
       });
@@ -161,7 +163,7 @@ function App() {
       formData.append('query', userQuery);
       formData.append('history', history);
 
-      const response = await fetch('http://localhost:8000/chat', {
+      const response = await fetch(`${API_BASE}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: formData.toString(),

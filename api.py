@@ -166,5 +166,12 @@ async def export_report(request: ExportReportRequest):
         media_type="application/pdf"
     )
 
+# Mount static frontend build if present (enables all-in-one single server deployment)
+frontend_dist = os.path.join(os.path.dirname(__file__), "frontend", "dist")
+if os.path.exists(frontend_dist):
+    from fastapi.staticfiles import StaticFiles
+    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
+
+
 
 
