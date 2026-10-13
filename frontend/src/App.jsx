@@ -2,23 +2,49 @@ import React, { useState, useRef, useEffect } from 'react';
 import { marked } from 'marked';
 import { 
   UploadCloud, Send, FileText, User, Zap, Layout, 
-  Folder, BarChart2, MoreVertical, Search, Paperclip, Check, Sparkles, FileSearch, Trash2, Download
+  Folder, BarChart2, MoreVertical, Search, Paperclip, Check, Sparkles, FileSearch, Trash2, Download,
+  Loader2, CheckCircle2, Cpu
 } from 'lucide-react';
 import './App.css';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? 'http://localhost:8000' : '')).replace(/\/$/, '');
+
+const uploadPipelineSteps = [
+  { title: "Ingestion & Upload", description: "Transferring file(s) to RAG corpus engine" },
+  { title: "Layout & Text Extraction", description: "Parsing pages & preserving tables with pdfplumber" },
+  { title: "Semantic Embeddings", description: "Generating vectors with all-MiniLM-L6-v2" },
+  { title: "FAISS Vector Index", description: "Building similarity index & preparing Q&A" },
+];
 
 function App() {
   const [activeTab, setActiveTab] = useState('workspace'); // 'workspace', 'document'
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadStep, setUploadStep] = useState(0);
+  const [uploadingFileNames, setUploadingFileNames] = useState([]);
+  const [isDragging, setIsDragging] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    if (!isUploading) {
+      setUploadStep(0);
+      return;
+    }
+    const timer1 = setTimeout(() => setUploadStep(1), 2200);
+    const timer2 = setTimeout(() => setUploadStep(2), 6000);
+    const timer3 = setTimeout(() => setUploadStep(3), 12000);
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      clearTimeout(timer3);
+    };
+  }, [isUploading]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -111,9 +137,12 @@ function App() {
   };
 
   const handleFileUpload = async (event) => {
-    const files = event.target.files;
-    if (!files.length) return;
+    const files = event?.target?.files || event?.files;
+    if (!files || !files.length) return;
 
+    const names = Array.from(files).map(f => f.name);
+    setUploadingFileNames(names);
+    setUploadStep(0);
     setIsUploading(true);
     const formData = new FormData();
     for (let i = 0; i < files.length; i++) {
@@ -137,7 +166,10 @@ function App() {
       alert('Upload failed. Is the backend running?');
     } finally {
       setIsUploading(false);
-      event.target.value = null;
+      setUploadingFileNames([]);
+      if (event?.target) {
+        event.target.value = null;
+      }
     }
   };
 
@@ -313,7 +345,19 @@ function App() {
               <h2 style={{ fontSize: '2rem', color: '#111827', marginBottom: '0.5rem' }}>Your Document</h2>
               <p style={{ color: '#6b7280', marginBottom: '2rem' }}>Upload a PDF or text file to start asking questions and retrieving answers.</p>
               
-              <div className="upload-box" onClick={() => fileInputRef.current?.click()}>
+              <div 
+                className={`upload-box ${isDragging ? 'drag-over' : ''}`} 
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDragging(false);
+                  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                    handleFileUpload({ target: { files: e.dataTransfer.files } });
+                  }
+                }}
+              >
                 <UploadCloud size={48} />
                 <h3>Upload a document</h3>
                 <p>Drag and drop your file here or browse</p>
@@ -454,6 +498,68 @@ function App() {
 
         </main>
       </div>
+
+      {/* Full-Screen Loading Screen Overlay During Document Upload & Vectorization */}
+      {isUploading && (
+        <div className="upload-overlay-backdrop">
+          <div className="upload-modal-card">
+            <div className="upload-modal-accent" />
+            
+            <div className="upload-icon-wrapper">
+              <div className="upload-icon-pulse" />
+              <div className="upload-icon-inner">
+                <Cpu size={28} />
+              </div>
+            </div>
+
+            <h3 className="upload-modal-title">
+              Vectorizing Document{uploadingFileNames.length > 1 ? 's' : ''}
+            </h3>
+            <p className="upload-modal-subtitle" title={uploadingFileNames.join(', ')}>
+              {uploadingFileNames.length > 0 
+                ? uploadingFileNames.length === 1 
+                  ? `Processing "${uploadingFileNames[0]}"`
+                  : `Processing ${uploadingFileNames.length} documents (${uploadingFileNames.join(', ')})`
+                : 'Processing document pipeline...'}
+            </p>
+
+            <div className="upload-steps-list">
+              {uploadPipelineSteps.map((step, idx) => {
+                const isDone = uploadStep > idx;
+                const isCurrent = uploadStep === idx;
+                return (
+                  <div 
+                    key={idx} 
+                    className={`upload-step-item ${isDone ? 'completed' : ''} ${isCurrent ? 'active' : ''}`}
+                  >
+                    <div className="upload-step-icon">
+                      {isDone ? (
+                        <CheckCircle2 size={16} color="#059669" />
+                      ) : isCurrent ? (
+                        <Loader2 size={16} color="#0052cc" className="spinner-spin" />
+                      ) : (
+                        <div className="step-dot" />
+                      )}
+                    </div>
+                    <div className="upload-step-text">
+                      <span className="upload-step-label">{step.title}</span>
+                      <span className="upload-step-desc">{step.description}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="upload-progress-container">
+              <div className="upload-progress-bar-indeterminate" />
+            </div>
+
+            <p className="upload-modal-tip">
+              ⚡ Running deep semantic chunking & FAISS index vectorization.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

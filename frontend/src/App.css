@@ -435,3 +435,239 @@
   color: var(--text-secondary);
   font-size: 0.875rem;
 }
+
+.upload-box.drag-over {
+  border-color: var(--accent-primary);
+  background: var(--accent-light);
+  transform: scale(1.01);
+  box-shadow: 0 10px 25px -5px rgba(0, 82, 204, 0.15);
+}
+
+/* ==========================================================================
+   Full-Screen Upload & Vectorization Loading Modal
+   ========================================================================== */
+.upload-overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: modalFadeIn 0.25s ease-out forwards;
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.upload-modal-card {
+  background: #ffffff;
+  width: 92%;
+  max-width: 480px;
+  border-radius: 16px;
+  padding: 2.25rem 2rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 82, 204, 0.22), 0 0 0 1px rgba(226, 232, 240, 0.8);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  animation: modalPopUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes modalPopUp {
+  from { opacity: 0; transform: scale(0.92) translateY(12px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Glowing Top Accent Line */
+.upload-modal-accent {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #0052cc, #6366f1, #06b6d4, #0052cc);
+  background-size: 300% 100%;
+  animation: accentShimmer 2.5s infinite linear;
+}
+
+@keyframes accentShimmer {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 100% 50%; }
+}
+
+/* Center Animated Icon with Expanding Waves */
+.upload-icon-wrapper {
+  position: relative;
+  width: 76px;
+  height: 76px;
+  margin-bottom: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.upload-icon-pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(0, 82, 204, 0.15);
+  animation: pulseRipple 2.2s infinite ease-out;
+}
+
+@keyframes pulseRipple {
+  0% { transform: scale(0.85); opacity: 0.8; }
+  100% { transform: scale(1.45); opacity: 0; }
+}
+
+.upload-icon-inner {
+  position: relative;
+  z-index: 2;
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #eff6ff, #dbeafe);
+  border: 1.5px solid #bfdbfe;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #0052cc;
+  box-shadow: 0 4px 12px rgba(0, 82, 204, 0.12);
+}
+
+.spinner-spin {
+  animation: spinCircle 1.1s linear infinite;
+}
+
+@keyframes spinCircle {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.upload-modal-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 0.35rem;
+  letter-spacing: -0.01em;
+}
+
+.upload-modal-subtitle {
+  font-size: 0.85rem;
+  color: #64748b;
+  max-width: 380px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Multi-Step Pipeline Status List */
+.upload-steps-list {
+  width: 100%;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  margin: 1.25rem 0 1rem 0;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.upload-step-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  font-size: 0.825rem;
+  color: #94a3b8;
+  transition: all 0.25s ease;
+}
+
+.upload-step-item.active {
+  color: #0052cc;
+}
+
+.upload-step-item.completed {
+  color: #059669;
+}
+
+.upload-step-icon {
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.step-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #cbd5e1;
+}
+
+.upload-step-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.upload-step-label {
+  font-weight: 600;
+  font-size: 0.825rem;
+}
+
+.upload-step-desc {
+  font-size: 0.72rem;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.upload-step-item.active .upload-step-desc {
+  color: #2563eb;
+}
+
+/* Indeterminate Shimmer Progress Bar */
+.upload-progress-container {
+  width: 100%;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 0.4rem;
+  position: relative;
+}
+
+.upload-progress-bar-indeterminate {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 40%;
+  background: linear-gradient(90deg, #0052cc, #6366f1);
+  border-radius: 999px;
+  animation: indeterminateShimmer 1.5s infinite ease-in-out;
+}
+
+@keyframes indeterminateShimmer {
+  0% { left: -40%; width: 35%; }
+  50% { left: 25%; width: 55%; }
+  100% { left: 100%; width: 35%; }
+}
+
+.upload-modal-tip {
+  font-size: 0.72rem;
+  color: #64748b;
+  margin-top: 1rem;
+  line-height: 1.4;
+}
+
