@@ -5,6 +5,13 @@ from langchain_community.vectorstores import FAISS
 import os
 import uuid
 
+# Restrict thread pools to keep memory minimal on low-RAM free tiers (Render 512MB)
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 # Step 1: Load raw PDF(s)
 
 pdfs_directory = 'pdfs/'  # Folder to store PDFs
@@ -37,12 +44,30 @@ def create_chunks(documents, file_name):
     
     return valid_chunks
 
-# Step 3: Setup Embeddings Model
-def get_embedding_model():
-    embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-    return embedding_model
+# Step 3: Setup Embeddings Model (Lazy Loaded to prevent memory spikes on boot)
+_embedding_model_instance = None
 
-embedding_model = get_embedding_model()
+def get_embedding_model():
+    global _embedding_model_instance
+    if _embedding_model_instance is None:
+        try:
+            import torch
+            torch.set_num_threads(1)
+        except Exception:
+            pass
+        _embedding_model_instance = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-MiniLM-L6-v2",
+            model_kwargs={"device": "cpu"}
+        )
+    return _embedding_model_instance
+
+class _LazyEmbeddingModelProxy:
+    def __getattr__(self, name):
+        return getattr(get_embedding_model(), name)
+    def __call__(self, *args, **kwargs):
+        return get_embedding_model()(*args, **kwargs)
+
+embedding_model = _LazyEmbeddingModelProxy()
 
 # Step 4: Index Documents with Metadata
 FAISS_DB_PATH = "vectorstore/db_faiss"
