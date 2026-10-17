@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>Retrieve. Understand. Answer.</strong><br>
-  A high-performance, enterprise-grade Retrieval-Augmented Generation (RAG) platform designed for multi-document intelligence, adaptive semantic search, deep contextual synthesis, and verified source citations.
+  A high-performance, enterprise-grade Retrieval-Augmented Generation (RAG) platform designed for multi-document intelligence, adaptive semantic search, and deep contextual synthesis.
 </p>
 
 <p align="center">
@@ -34,7 +34,7 @@
 
 Traditional language models suffer from hallucinations and knowledge cutoffs when asked about dense or private files. Retrieva solves this with an **adaptive RAG pipeline** backed by local vector embeddings, smart document chunking, low-resource memory optimizations, and ultra-fast inference through **Groq**. 
 
-Every generated answer is anchored to verified source documents, delivering page-level citations for transparent and trustworthy answers.
+Every generated answer is anchored to verified source documents for transparent and trustworthy answers.
 
 ---
 
@@ -66,21 +66,11 @@ Unlike basic RAG setups that blindly return fixed `top-k` snippets, Retrieva inc
 - Prevents cross-contamination between distinct document sections (e.g., project descriptions only list technologies explicitly mentioned in that project's scope, rather than borrowing from a generic skills section).
 - Formats structured answers using clean Markdown with tables, bullet lists, and section headers.
 
-### 5. 📌 Verified Page & File-Level Citations
-- Every AI response includes clickable badges showing the **source document name** and **exact page number** (`p. X`).
-- Instantly verify where specific facts, statistics, or clauses originated from within the original documents.
-
-### 6. 🟢 Live Backend Health Polling & Cold-Start Awareness
-- Dynamic status indicator in the sidebar showing live connectivity status:
-  - `🟢 Online`: Backend is active and connected.
-  - `🟡 Waking up...`: Gracefully informs users when Render free tier is waking from sleep (~30-45s), preventing confusing upload failures.
-  - `⚪ Connecting...`: Initial handshake verification.
-
-### 7. 📊 Exportable PDF Analysis Reports
+### 5. 📊 Exportable PDF Analysis Reports
 - Generate formatted PDF reports summarizing the entire conversation history, query prompts, and AI answers with a single click.
 - Built with `ReportLab` featuring custom headers, source document stamps, date-time tracking, pagination, and multi-page text formatting.
 
-### 8. 🛡️ Cloud & Free-Tier Memory Optimizations
+### 6. 🛡️ Cloud & Free-Tier Memory Optimizations
 - **Thread Control:** Configured `OMP_NUM_THREADS=1` and `MKL_NUM_THREADS=1` to prevent PyTorch from allocating multiple 64MB memory pools.
 - **Sequential Chunk Encoding:** Set `batch_size=1` during embedding generation to eliminate memory spikes on 512MB RAM cloud tiers.
 - **Non-Blocking Async Threads:** CPU-heavy vectorization and LLM synthesis are offloaded via `asyncio.to_thread` to ensure the FastAPI event loop never blocks or triggers 502 gateway timeouts.
@@ -111,7 +101,7 @@ flowchart TD
         SEMANTIC --> CONTEXT
         CONTEXT --> PROMPT["Grounded Strict Prompt Template"]
         PROMPT --> GROQ["Groq LLM Inference\n(openai/gpt-oss-120b)"]
-        GROQ --> RESP["Synthesized Markdown Answer\n+ Verified Source Citations"]
+        GROQ --> RESP["Synthesized Markdown Answer"]
     end
 ```
 
@@ -391,8 +381,8 @@ Generates and downloads a publication-ready PDF report of the active conversatio
 ## 💼 Real-World Use Cases
 
 - **📄 Resume & Candidate Screening:** Parse candidate resumes and ask complex queries (*"List every project with React in the candidate's career and their specific achievements"*) without missing sections.
-- **📑 Legal & Policy Audit:** Interrogate dense contracts, NDAs, and SLAs to locate key clauses, indemnities, and termination terms with verified page citations.
-- **📊 Financial & Research Reports:** Ingest multi-page annual reports, earnings transcripts, or research papers and extract data backed by verifiable citations.
+- **📑 Legal & Policy Audit:** Interrogate dense contracts, NDAs, and SLAs to locate key clauses, indemnities, and termination terms.
+- **📊 Financial & Research Reports:** Ingest multi-page annual reports, earnings transcripts, or research papers and extract data backed by verifiable context.
 - **📚 Technical Documentation Assistant:** Transform technical manuals, SDK guides, and architecture specifications into a 24/7 conversational assistant.
 
 ---
